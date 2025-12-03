@@ -44,7 +44,17 @@ class WebXRController {
 		 * @type {?Group}
 		 * @default null
 		 */
+		/**
+		 * A group representing the hand space
+		 * of the XR controller.
+		 *
+		 * @private
+		 * @type {?Group}
+		 * @default null
+		 */
 		this._hand = null;
+
+		this._gamepad = null;
 
 	}
 
@@ -172,6 +182,15 @@ class WebXRController {
 
 		}
 
+		if ( inputSource && inputSource.gamepad ) {
+
+			this._gamepad = {
+				buttons: inputSource.gamepad.buttons.map( ( button ) => button.value ),
+				axes: inputSource.gamepad.axes.slice( 0 )
+			};
+
+		}
+
 		this.dispatchEvent( { type: 'connected', data: inputSource } );
 
 		return this;
@@ -187,6 +206,8 @@ class WebXRController {
 	disconnect( inputSource ) {
 
 		this.dispatchEvent( { type: 'disconnected', data: inputSource } );
+
+		this._gamepad = null;
 
 		if ( this._targetRay !== null ) {
 
@@ -372,6 +393,53 @@ class WebXRController {
 
 			}
 
+
+
+
+			if ( inputSource.gamepad && this._gamepad ) {
+
+				const gamepad = inputSource.gamepad;
+				const data = this._gamepad;
+
+				for ( let i = 0; i < gamepad.buttons.length; i ++ ) {
+
+					const button = gamepad.buttons[ i ];
+					const value = button.value;
+					const prevValue = data.buttons[ i ];
+
+					if ( value !== prevValue ) {
+
+						if ( button.pressed && value === 1 ) {
+
+							this.dispatchEvent( { type: 'buttondown', data: { index: i, gamepad: gamepad } } );
+
+						} else if ( ! button.pressed && value === 0 ) {
+
+							this.dispatchEvent( { type: 'buttonup', data: { index: i, gamepad: gamepad } } );
+
+						}
+
+						data.buttons[ i ] = value;
+
+					}
+
+				}
+
+				for ( let i = 0; i < gamepad.axes.length; i ++ ) {
+
+					const axis = gamepad.axes[ i ];
+					const prevAxis = data.axes[ i ];
+
+					if ( axis !== prevAxis ) {
+
+						this.dispatchEvent( { type: 'axischanged', data: { index: i, value: axis, gamepad: gamepad } } );
+						data.axes[ i ] = axis;
+
+					}
+
+				}
+
+			}
 
 		}
 
