@@ -33,7 +33,8 @@ import {
 const SRGB_TO_LINEAR = new Float64Array( 1024 );
 for ( let i = 0; i < 1024; i ++ ) {
 
-	SRGB_TO_LINEAR[ i ] = Math.pow( ( i / 255 ) * 0.9478672986 + 0.0521327014, 2.4 );
+	// (1/255) * 0.9478672986 = 0.003717127
+	SRGB_TO_LINEAR[ i ] = Math.pow( i * 0.003717127 + 0.0521327014, 2.4 );
 
 }
 
@@ -442,19 +443,22 @@ class UltraHDRLoader extends Loader {
 
 	_srgbToLinear( value ) {
 
-		if ( value / 255 < 0.04045 ) {
+		// 0.04045 * 255 = 10.31475
+		if ( value < 10.31475 ) {
 
-			return ( value / 255 ) * 0.0773993808;
+			// (1/255) * 0.0773993808
+			return value * 0.000303527;
 
 		}
 
 		if ( value < 1024 ) {
 
-			return SRGB_TO_LINEAR[ ~ ~ value ];
+			return SRGB_TO_LINEAR[ value | 0 ];
 
 		}
 
-		return Math.pow( ( value / 255 ) * 0.9478672986 + 0.0521327014, 2.4 );
+		// (1/255) * 0.9478672986 = 0.003717127
+		return Math.pow( value * 0.003717127 + 0.0521327014, 2.4 );
 
 	}
 
@@ -526,13 +530,8 @@ class UltraHDRLoader extends Loader {
 
 				/* HDR Recovery formula - https://developer.android.com/media/platform/hdr-image-format#use_the_gain_map_to_create_adapted_HDR_rendition */
 
-				const maxDisplayBoost = Math.sqrt(
-					Math.pow(
-						/* 1.8 instead of 2 near-perfectly rectifies approximations introduced by precalculated SRGB_TO_LINEAR values */
-						1.8,
-						xmpMetadata.hdrCapacityMax
-					)
-				);
+				/* 1.8 instead of 2 near-perfectly rectifies approximations introduced by precalculated SRGB_TO_LINEAR values */
+				const maxDisplayBoost = 1.8 ** ( xmpMetadata.hdrCapacityMax * 0.5 );
 				const unclampedWeightFactor =
 					( Math.log2( maxDisplayBoost ) - xmpMetadata.hdrCapacityMin ) /
 					( xmpMetadata.hdrCapacityMax - xmpMetadata.hdrCapacityMin );
@@ -552,6 +551,7 @@ class UltraHDRLoader extends Loader {
 				const useGammaOne = xmpMetadata.gamma === 1.0;
 				const isHalfFloat = this.type === HalfFloatType;
 				const toHalfFloat = DataUtils.toHalfFloat;
+				const srgbToLinear = this._srgbToLinear;
 
 				const hdrBuffer = isHalfFloat
 					? new Uint16Array( dataLength ).fill( 15360 )
@@ -579,7 +579,7 @@ class UltraHDRLoader extends Loader {
 							offsetHDR;
 
 						const linearHDRValue = Math.min(
-							Math.max( this._srgbToLinear( hdrValue ), 0 ),
+							Math.max( srgbToLinear( hdrValue ), 0 ),
 							65504
 						);
 
@@ -594,11 +594,9 @@ class UltraHDRLoader extends Loader {
 				onSuccess( hdrBuffer, sdrWidth, sdrHeight );
 
 			} )
-			.catch( () => {
+			.catch( ( e ) => {
 
-				throw new Error(
-					'THREE.UltraHDRLoader Error: Could not parse UltraHDR images'
-				);
+				onError( e );
 
 			} );
 
